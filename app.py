@@ -81,13 +81,7 @@ def render_single_analysis(analysis: dict):
         return
 
     # header row
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader(f"📄 {analysis.get('file', 'Unknown')}")
-    with col2:
-        cls = analysis.get("classification", "").upper()
-        badge_col = "🔵" if cls == "LIGHT" else "🟠"
-        st.markdown(f"**{badge_col} {cls}**")
+    st.subheader(f"📄 {analysis.get('file', 'Unknown')}")
 
     # ── severity scorecard ────────────────────────────────────────────────────
     findings = analysis.get("findings", [])
@@ -156,7 +150,7 @@ def render_single_analysis(analysis: dict):
                 sev = page.get("verdict", "GREEN")
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div style="font-size:11px;color:#888;margin-bottom:4px">{page.get('url','unknown')[:50]}</div>
+                    <div style="font-size:11px;color:#888;margin-bottom:4px">{page.get('url','unknown')}</div>
                     <div style="font-size:22px;font-weight:700">{page.get('total_load_ms',0):,}ms</div>
                     <div style="margin-top:6px">{severity_badge(sev)}</div>
                     <div style="font-size:12px;color:#aaa;margin-top:6px">{page.get('one_liner','')}</div>
@@ -182,22 +176,18 @@ def render_single_analysis(analysis: dict):
             </div>
             """, unsafe_allow_html=True)
 
-    # two-column: false positives + data gaps
+    # false positives then data gaps, stacked vertically
     fp = analysis.get("false_positives", [])
     gaps = analysis.get("data_gaps", [])
-    if fp or gaps:
-        left, right = st.columns(2)
-        if fp:
-            with left:
-                st.markdown('<div class="section-header">⚠️ False Positives / Noise</div>', unsafe_allow_html=True)
-                for item in fp:
-                    with st.expander(item.get("flagged_issue", "")[:60]):
-                        st.write(item.get("reason", ""))
-        if gaps:
-            with right:
-                st.markdown('<div class="section-header">🕳️ Data Gaps</div>', unsafe_allow_html=True)
-                for g in gaps:
-                    st.markdown(f"- {g}")
+    if fp:
+        st.markdown('<div class="section-header">⚠️ False Positives / Noise — <span style="font-weight:400;font-size:13px">These were flagged by the analysis tool but are not real issues on your site.</span></div>', unsafe_allow_html=True)
+        for item in fp:
+            with st.expander(item.get("flagged_issue", "")):
+                st.write(item.get("reason", ""))
+    if gaps:
+        st.markdown('<div class="section-header">🕳️ Data Gaps</div>', unsafe_allow_html=True)
+        for g in gaps:
+            st.markdown(f"- {g}")
 
     # top 3 priorities
     priorities = analysis.get("top_3_priorities", [])
@@ -217,12 +207,10 @@ def main():
 
     # ── sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
-        st.header("📂 Upload Files")
+        st.header("📂 Upload File")
         uploaded = st.file_uploader(
-            "Upload one or more analysis JSON files",
+            "Upload an analysis JSON file",
             type=["json"],
-            accept_multiple_files=True,
-            help="Upload light_*.json or heavy_*.json files",
         )
 
         st.divider()
@@ -235,16 +223,13 @@ def main():
 
         if uploaded:
             st.divider()
-            st.caption(f"**{len(uploaded)} file(s) loaded:**")
-            for f in uploaded:
-                icon = "🔵" if f.name.startswith("light") else "🟠"
-                st.caption(f"{icon} {f.name}")
+            st.caption(f"**{uploaded.name}**")
 
     # ── main area ─────────────────────────────────────────────────────────────
     if not uploaded:
         st.markdown("""
         ### How to use
-        1. Upload your `light_*.json` or `heavy_*.json` analysis files using the sidebar
+        1. Upload your analysis JSON file using the sidebar
         2. Click **Run Analysis**
 
         ### What you'll get
@@ -256,69 +241,46 @@ def main():
         return
 
     if not analyze_btn:
-        st.info(f"**{len(uploaded)} file(s) ready.** Click **Run Analysis** in the sidebar to proceed.")
+        st.info(f"**{uploaded.name}** ready. Click **Run Analysis** in the sidebar to proceed.")
         return
 
     # ── run analysis ──────────────────────────────────────────────────────────
     client = get_client()
-    loaded_files = []
 
-    with st.spinner("Loading and preprocessing files..."):
-        for uf in uploaded:
-            try:
-                loaded_files.append(load_uploaded(uf))
-            except Exception as e:
-                st.error(f"Failed to load {uf.name}: {e}")
-                return
-
-    individual_results = []
-    progress = st.progress(0, text="Analyzing files...")
-
-    for i, loaded in enumerate(loaded_files):
-        progress.progress(
-            i / len(loaded_files),
-            text=f"Analyzing {loaded['filename']} ({i+1}/{len(loaded_files)})...",
-        )
+    with st.spinner("Loading file..."):
         try:
-            context = build_context(loaded)
-            prompt = single_file_prompt(context)
-
-            # stream live tokens into a code block, swap for structured report when done
-            stream_placeholder = st.empty()
-            streamed_text = ""
-            result = None
-
-            for event in client.analyze_stream(prompt, SYSTEM_PROMPT):
-                if "chunk" in event:
-                    streamed_text += event["chunk"]
-                    stream_placeholder.code(streamed_text, language="json")
-                elif "final_json" in event:
-                    result = event["final_json"]
-
-            stream_placeholder.empty()
-            individual_results.append(result)
-
+            loaded = load_uploaded(uploaded)
         except Exception as e:
-            st.error(f"Analysis failed for {loaded['filename']}: {e}")
-            individual_results.append({"file": loaded["filename"], "parse_error": True, "raw_response": str(e)})
+            st.error(f"Failed to load {uploaded.name}: {e}")
+            return
 
-    progress.progress(1.0, text="Done!")
-    progress.empty()
+    try:
+        context = build_context(loaded)
+        prompt = single_file_prompt(context)
 
-    # render results
-    if len(individual_results) == 1:
-        render_single_analysis(individual_results[0])
-    else:
-        tabs = st.tabs([r.get("file", f"File {i+1}") for i, r in enumerate(individual_results)])
-        for tab, result in zip(tabs, individual_results):
-            with tab:
-                render_single_analysis(result)
+        stream_placeholder = st.empty()
+        streamed_text = ""
+        result = None
 
-    # download
+        for event in client.analyze_stream(prompt, SYSTEM_PROMPT):
+            if "chunk" in event:
+                streamed_text += event["chunk"]
+                stream_placeholder.code(streamed_text, language="json")
+            elif "final_json" in event:
+                result = event["final_json"]
+
+        stream_placeholder.empty()
+
+    except Exception as e:
+        st.error(f"Analysis failed: {e}")
+        return
+
+    render_single_analysis(result)
+
     st.divider()
     st.download_button(
-        label="⬇️ Download Full Report (JSON)",
-        data=json.dumps({"individual": individual_results}, indent=2),
+        label="⬇️ Download Report (JSON)",
+        data=json.dumps(result, indent=2),
         file_name="har_analysis_report.json",
         mime="application/json",
     )

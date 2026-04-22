@@ -21,7 +21,7 @@ Always structure your response as valid JSON matching the schema provided in the
 
 
 def single_file_prompt(context: dict) -> str:
-    return f"""Analyze this HAR analysis data for file: {context['filename']} (classification: {context['classification']})
+    return f"""Analyze this HAR analysis data for file: {context['filename']}
 
 DATA:
 {json.dumps(context['data'], indent=2)}
@@ -29,7 +29,6 @@ DATA:
 Return a JSON response with this exact structure:
 {{
   "file": "<filename>",
-  "classification": "<light|heavy>",
   "executive_summary": "<2-3 sentence plain English summary of the overall health of this recording>",
   "pages_analyzed": [
     {{

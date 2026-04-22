@@ -10,7 +10,6 @@ def load_file(path: str) -> dict:
     filename = Path(path).name
     return {
         "filename": filename,
-        "classification": _classify(filename),
         "data": data,
     }
 
@@ -24,13 +23,3 @@ def load_directory(directory: str) -> list[dict]:
 def load_files(paths: list[str]) -> list[dict]:
     """Load a specific list of files."""
     return [load_file(p) for p in paths]
-
-
-def _classify(filename: str) -> str:
-    """Classify file as light or heavy based on filename."""
-    name = filename.lower()
-    if name.startswith("light"):
-        return "light"
-    if name.startswith("heavy"):
-        return "heavy"
-    return "unknown"

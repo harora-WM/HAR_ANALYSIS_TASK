@@ -29,7 +29,7 @@ The tool accepts the structured JSON output files produced by a HAR analysis pip
 }
 ```
 
-Files are typically named `light_*.json` (simple flows, few requests) or `heavy_*.json` (full user journeys, hundreds of requests with analytics/chat/trackers).
+Sample input files are kept in the `input_files/` folder.
 
 ---
 
@@ -38,16 +38,15 @@ Files are typically named `light_*.json` (simple flows, few requests) or `heavy_
 ```
 har_analysis/
 ├── app.py                    ← Streamlit web UI
-├── main.py                   ← CLI entry point
 ├── requirements.txt
 ├── .env.example              ← config template
+├── input_files/                    ← sample input JSON files
 └── analyzer/
     ├── __init__.py
-    ├── loader.py             ← reads and classifies JSON files
+    ├── loader.py             ← reads JSON files
     ├── context_builder.py    ← passes raw file data to Claude unchanged
     ├── bedrock_client.py     ← AWS Bedrock boto3 wrapper with streaming
-    ├── prompts.py            ← system prompt + single file analysis prompt
-    └── reporter.py           ← coloured terminal output formatter (CLI)
+    └── prompts.py            ← system prompt + single file analysis prompt
 ```
 
 ---
@@ -57,7 +56,7 @@ har_analysis/
 ```
 Upload JSON
     ↓
-loader.py        → load file, classify as light/heavy
+loader.py        → load file
     ↓
 context_builder  → pass raw data unchanged
     ↓
@@ -110,34 +109,16 @@ AWS_SECRET_ACCESS_KEY=your_secret_key_here
 
 ## Usage
 
-### Streamlit web app (recommended)
-
 ```bash
 streamlit run app.py
 ```
 
 Opens at `http://localhost:8501`
 
-1. Upload one or more `light_*.json` or `heavy_*.json` files via the sidebar
+1. Upload your analysis JSON file via the sidebar
 2. Click **Run Analysis**
 3. View the streamed analysis rendered as a structured report
-4. Download the full report as JSON using the button at the bottom
-
-### CLI
-
-```bash
-# single file
-python main.py light_0.json
-
-# multiple files
-python main.py light_0.json light_1.json heavy_1.json
-
-# all JSON files in current directory
-python main.py --all
-
-# save output to JSON
-python main.py --all --output report.json
-```
+4. Download the report as JSON using the button at the bottom
 
 ---
 
